@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Чат через PubNub</title>
+    <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.5.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-body: #e5ddd5;
+            --bg-sidebar: #ffffff;
+            --msg-sent: #d9fdd3;
+            --msg-received: #ffffff;
+            --text-primary: #111b21;
+            --text-secondary: #667781;
+            --accent: #00a884;
+            --border: #e9edef;
+        }
+        [data-theme="dark"] {
+            --bg-body: #0b141a;
+            --bg-sidebar: #111b21;
+            --msg-sent: #005c4b;
+            --msg-received: #202c33;
+            --text-primary: #e9edef;
+            --text-secondary: #8696a0;
+            --border: #222d34;
+        }
+        * { box-sizing: border-box; outline: none; }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg-body); height: 100vh; display: flex; overflow: hidden; color: var(--text-primary); }
+
+        .sidebar { width: 350px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 10; }
+        .sidebar-header { height: 60px; padding: 10px 15px; background: var(--bg-sidebar); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+        .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #FF9966, #FF5E62); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.2rem; cursor: pointer; }
+        
+        .room-info { background: #e3f2fd; padding: 15px; margin: 10px; border-radius: 8px; font-size: 0.85rem; border-left: 4px solid #2196f3; }
+        .room-code { font-weight: bold; color: #0066cc; font-size: 1.1rem; margin: 8px 0; word-break: break-all; }
+
+        .chat-list { flex: 1; overflow-y: auto; }
+        .chat-item { padding: 12px 15px; display: flex; gap: 15px; cursor: pointer; border-bottom: 1px solid var(--border); transition: 0.2s; }
+        .chat-item:hover, .chat-item.active { background: var(--bg-body); }
+        .chat-info { flex: 1; }
+        .chat-name { font-weight: 600; font-size: 1rem; margin-bottom: 3px; }
+        .chat-preview { font-size: 0.85rem; color: var(--text-secondary); }
+        
+        .sidebar-footer { padding: 10px; border-top: 1px solid var(--border); display: flex; justify-content: space-around; }
+        .icon-btn { background: none; border: none; color: var(--text-secondary); font-size: 1.2rem; cursor: pointer; padding: 8px; border-radius: 50%; }
+        .icon-btn:hover { background: rgba(0,0,0,0.05); color: var(--text-primary); }
+
+        .main-chat { flex: 1; display: flex; flex-direction: column; background: var(--bg-body); position: relative; }
+        .chat-header { height: 60px; background: var(--bg-sidebar); padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); z-index: 5; }
+        .header-info { display: flex; align-items: center; gap: 15px; }
+        .menu-toggle { display: none; font-size: 1.2rem; color: var(--text-secondary); cursor: pointer; margin-right: 10px; }
+        
+        .messages-area { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 1; }
+        .message { max-width: 70%; padding: 8px 12px; border-radius: 8px; font-size: 0.95rem; line-height: 1.4; position: relative; animation: fadeIn 0.2s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .message.sent { align-self: flex-end; background: var(--msg-sent); border-top-right-radius: 0; }
+        .message.received { align-self: flex-start; background: var(--msg-received); border-top-left-radius: 0; }
+        .message.system { align-self: center; background: rgba(0,0,0,0.05); color: var(--text-secondary); font-size: 0.8rem; padding: 5px 10px; border-radius: 10px; text-align: center; }
+        .msg-time { font-size: 0.7rem; color: var(--text-secondary); float: right; margin-left: 10px; margin-top: 5px; }
+
+        .input-area { min-height: 62px; background: var(--bg-sidebar); padding: 10px 15px; display: flex; align-items: center; gap: 10px; z-index: 5; }
+        .input-box { flex: 1; background: var(--bg-body); border-radius: 8px; padding: 9px 12px; }
+        #messageInput { width: 100%; border: none; background: transparent; color: var(--text-primary); font-size: 1rem; }
+        .send-btn { width: 45px; height: 45px; border-radius: 50%; border: none; background: var(--accent); color: white; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 100; }
+        .modal { background: var(--bg-sidebar); padding: 25px; border-radius: 10px; width: 90%; max-width: 400px; color: var(--text-primary); }
+        .modal h3 { margin-top: 0; }
+        .modal label { display: block; margin-top: 15px; font-weight: 600; }
+        .modal input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg-body); color: var(--text-primary); }
+        .modal-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-secondary { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+        .info-box { background: #e3f2fd; color: #0d47a1; padding: 15px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 20px; border-left: 4px solid #2196f3; }
+
+        @media (max-width: 768px) {
+            .sidebar { position: absolute; height: 100%; transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .menu-toggle { display: block; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="user-avatar" id="myAvatar" onclick="openSettings()">U</div>
+            <div style="display: flex; gap: 5px;">
+                <button class="icon-btn" onclick="toggleTheme()"><i class="fas fa-moon"></i></button>
+                <button class="icon-btn" onclick="openSettings()"><i class="fas fa-cog"></i></button>
+            </div>
+        </div>
+
+        <div class="room-info">
+            <div><i class="fas fa-users"></i> Код комнаты:</div>
+            <div class="room-code" id="roomCode">Загрузка...</div>
+            <button class="btn btn-primary" style="width:100%; font-size:0.85rem;" onclick="copyRoomCode()">
+                <i class="fas fa-copy"></i> Копировать
+            </button>
+            <div style="font-size: 0.75rem; color: #666; margin-top: 8px; text-align: center;">
+                Отправь этот код другу для подключения
+            </div>
+        </div>
+
+        <div class="chat-list">
+            <div class="chat-item active">
+                <div class="user-avatar" style="background: linear-gradient(135deg, #667eea, #764ba2);">💬</div>
+                <div class="chat-info">
+                    <div class="chat-name">Общий чат</div>
+                    <div class="chat-preview" id="lastMessage">Ожидание...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <button class="icon-btn" onclick="clearChat()"><i class="fas fa-trash"></i></button>
+        </div>
+    </div>
+
+    <div class="main-chat">
+        <div class="chat-header">
+            <div class="header-info">
+                <i class="fas fa-bars menu-toggle" onclick="toggleSidebar()"></i>
+                <div class="user-avatar" style="width: 35px; height: 35px; font-size: 0.9rem; background: linear-gradient(135deg, #667eea, #764ba2);">💬</div>
+                <div>
+                    <div style="font-weight: 600;">Общий чат</div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);" id="chatStatus">подключение...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="messages-area" id="messagesArea"></div>
+
+        <div class="input-area">
+            <div class="input-box">
+                <input type="text" id="messageInput" placeholder="Введите сообщение..." onkeypress="handleEnter(event)">
+            </div>
+            <button class="send-btn" onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <h3>Настройки</h3>
+            <div class="info-box">
+                <i class="fas fa-info-circle"></i> 
+                <b>Как общаться?</b><br>
+                1. Отправь другу ссылку на сайт<br>
+                2. Скажи ему код комнаты (слева)<br>
+                3. Он вводит код и вы общаетесь!
+            </div>
+            <label>Ваше имя</label>
+            <input type="text" id="usernameInput" placeholder="Как вас называть">
+            <label>Код комнаты друга</label>
+            <input type="text" id="roomCodeInput" placeholder="Введите код комнаты">
+            <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="joinRoom()">
+                Подключиться к комнате
+            </button>
+            <div class="modal-btns">
+                <button class="btn btn-secondary" onclick="closeSettings()">Закрыть</button>
+                <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === НАСТРОЙКИ PUBLNUB (ДЕМО-КЛЮЧИ - РАБОТАЮТ БЕЗ РЕГИСТРАЦИИ) ===
+        const PUBNUB_KEYS = {
+            publishKey: 'demo',
+            subscribeKey: 'demo'
+        };
+
+        let pubnub = null;
+        let currentChannel = null;
+        let currentUser = localStorage.getItem('chat_user') || 'User' + Math.floor(Math.random() * 1000);
+        let currentRoom = localStorage.getItem('chat_room') || 'room_' + Math.random().toString(36).substr(2, 6);
+
+        const els = {
+            msgArea: document.getElementById('messagesArea'),
+            input: document.getElementById('messageInput'),
+            roomCode: document.getElementById('roomCode'),
+            chatStatus: document.getElementById('chatStatus'),
+            lastMessage: document.getElementById('lastMessage')
+        };
+
+        // Инициализация
+        function init() {
+            els.roomCode.textContent = currentRoom;
+            updateUI();
+            applyTheme();
+            connectToRoom(currentRoom);
+        }
+
+        // Подключение к комнате
+        function connectToRoom(roomId) {
+            if(pubnub) pubnub.stop();
+
+            pubnub = new PubNub({
+                publishKey: PUBNUB_KEYS.publishKey,
+                subscribeKey: PUBNUB_KEYS.subscribeKey,
+                uuid: currentUser + '_' + Date.now()
+            });
+
+            currentChannel = roomId;
+
+            pubnub.subscribe({
+                channels: [currentChannel]
+            });
+
+            pubnub.addListener({
+                message: function(msg) {
+                    const message = msg.message;
+                    renderMessage(message, message.sender !== currentUser);
+                    els.lastMessage.textContent = message.text.substring(0, 30) + '...';
+                    scrollToBottom();
+                },
+                status: function(status) {
+                    if(status.category === 'PNConnectedCategory') {
+                        els.chatStatus.textContent = '● в сети';
+                        addSystemMessage('Вы подключились к комнате: ' + roomId);
+                    }
+                }
+            });
+
+            // Сообщение о входе
+            setTimeout(() => {
+                const joinMsg = {
+                    sender: 'System',
+                    text: currentUser + ' присоединился',
+                    time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                    type: 'system'
+                };
+                renderMessage(joinMsg, false, true);
+            }, 500);
+        }
+
+        // Отправка сообщения
+        function sendMessage() {
+            const text = els.input.value.trim();
+            if(!text) return;
+
+            const msg = {
+                sender: currentUser,
+                text: text,
+                time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                timestamp: Date.now()
+            };
+
+            pubnub.publish({
+                channel: currentChannel,
+                message: msg
+            }, function(status, response) {
+                if(!status.error) {
+                    renderMessage(msg, false);
+                    els.lastMessage.textContent = text.substring(0, 30) + '...';
+                    scrollToBottom();
+                } else {
+                    alert('Ошибка отправки: ' + status.errorData.message);
+                }
+            });
+
+            els.input.value = '';
+        }
+
+        // Отображение сообщения
+        function renderMessage(msg, isReceived, isSystem = false) {
+            const div = document.createElement('div');
+            if(isSystem) {
+                div.className = 'message system';
+                div.textContent = msg.text;
+            } else {
+                div.className = 'message ' + (isReceived ? 'received' : 'sent');
+                div.innerHTML = msg.text + '<div class="msg-time">' + msg.time + '</div>';
+            }
+            els.msgArea.appendChild(div);
+        }
+
+        function addSystemMessage(text) {
+            const div = document.createElement('div');
+            div.className = 'message system';
+            div.innerText = text;
+            els.msgArea.appendChild(div);
+        }
+
+        // UI функции
+        function updateUI() {
+            document.getElementById('myAvatar').textContent = currentUser.charAt(0).toUpperCase();
+            document.getElementById('usernameInput').value = currentUser;
+        }
+
+        function saveSettings() {
+            const name = document.getElementById('usernameInput').value.trim();
+            if(name) {
+                currentUser = name;
+                localStorage.setItem('chat_user', name);
+                updateUI();
+                // Переподключаемся с новым именем
+                connectToRoom(currentRoom);
+            }
+            closeSettings();
+        }
+
+        function joinRoom() {
+            const code = document.getElementById('roomCodeInput').value.trim();
+            if(code) {
+                currentRoom = code;
+                localStorage.setItem('chat_room', code);
+                els.roomCode.textContent = code;
+                els.msgArea.innerHTML = '';
+                connectToRoom(code);
+                closeSettings();
+            }
+        }
+
+        function openSettings() { document.getElementById('settingsModal').style.display = 'flex'; }
+        function closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
+        
+        function copyRoomCode() {
+            navigator.clipboard.writeText(currentRoom);
+            alert('Код скопирован!');
+        }
+
+        function clearChat() {
+            if(confirm('Очистить историю?')) {
+                els.msgArea.innerHTML = '';
+            }
+        }
+
+        function toggleTheme() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+            localStorage.setItem('chat_theme', isDark ? 'light' : 'dark');
+        }
+
+        function applyTheme() {
+            const t = localStorage.getItem('chat_theme');
+            if(t) document.documentElement.setAttribute('data-theme', t);
+        }
+
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+        function handleEnter(e) { if(e.key === 'Enter') sendMessage(); }
+        function scrollToBottom() { els.msgArea.scrollTop = els.msgArea.scrollHeight; }
+
+        // Запуск
+        init();
+    </script>
+</body>
+</html>
