@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <title>XhCode.com Text To HTML Converter</title>
+    </head>
+    <body>
+        <p>
+            <!DOCTYPE html>
+            <html lang="ru">
+                <head>
+                    <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <title>P2P Мессенджер (Без Firebase)</title>
+                            <!-- Подключаем PeerJS -->
+                            <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+                            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+                                <style> 
+        :root { 
+            --bg-body: #e5ddd5; 
+            --bg-sidebar: #ffffff; 
+            --msg-sent: #d9fdd3; 
+            --msg-received: #ffffff; 
+            --text-primary: #111b21; 
+            --text-secondary: #667781; 
+            --accent: #00a884; 
+            --error: #d32f2f; 
+            --success: #388e3c; 
+            --border: #e9edef; 
+        } 
+ 
+        [data-theme="dark"] { 
+            --bg-body: #0b141a; 
+            --bg-sidebar: #111b21; 
+            --msg-sent: #005c4b; 
+            --msg-received: #202c33; 
+            --text-primary: #e9edef; 
+            --text-secondary: #8696a0; 
+            --border: #222d34; 
+        } 
+ 
+        * { box-sizing: border-box; outline: none; } 
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg-body); height: 100vh; display: flex; overflow: hidden; color: var(--text-primary); } 
+ 
+        /* SIDEBAR */ 
+        .sidebar { width: 350px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 10; transition: transform 0.3s; } 
+        .sidebar-header { height: 60px; padding: 10px 15px; background: var(--bg-sidebar); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); } 
+        .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #FF9966, #FF5E62); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.2rem; cursor: pointer; } 
+         
+        .status-badge { 
+            display: inline-flex; align-items: center; gap: 6px; 
+            font-size: 0.75rem; padding: 4px 8px; border-radius: 12px; 
+            background: var(--bg-body); color: var(--text-secondary); 
+        } 
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; } 
+        .dot.green { background: var(--success); box-shadow: 0 0 5px var(--success); } 
+        .dot.red { background: var(--error); } 
+        .chat-list { flex: 1; overflow-y: auto; } 
+        .chat-item { padding: 12px 15px; display: flex; gap: 15px; cursor: pointer; border-bottom: 1px solid var(--border); transition: 0.2s; } 
+        .chat-item:hover, .chat-item.active { background: var(--bg-body); } 
+        .chat-info { flex: 1; } 
+        .chat-name { font-weight: 600; font-size: 1rem; margin-bottom: 3px; } 
+        .chat-preview { font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } 
+         
+        .sidebar-footer { padding: 10px; border-top: 1px solid var(--border); display: flex; justify-content: space-around; } 
+        .icon-btn { background: none; border: none; color: var(--text-secondary); font-size: 1.2rem; cursor: pointer; padding: 8px; border-radius: 50%; } 
+        .icon-btn:hover { background: rgba(0,0,0,0.05); color: var(--text-primary); } 
+ 
+        /* MAIN CHAT */ 
+        .main-chat { flex: 1; display: flex; flex-direction: column; background: var(--bg-body); position: relative; } 
+        .chat-header { height: 60px; background: var(--bg-sidebar); padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); z-index: 5; } 
+        .header-info { display: flex; align-items: center; gap: 15px; } 
+        .menu-toggle { display: none; font-size: 1.2rem; color: var(--text-secondary); cursor: pointer; margin-right: 10px; } 
+         
+        .messages-area { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 1; } 
+         
+        .message { max-width: 70%; padding: 8px 12px; border-radius: 8px; font-size: 0.95rem; line-height: 1.4; position: relative; animation: fadeIn 0.2s ease; word-wrap: break-word; } 
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } 
+        .message.sent { align-self: flex-end; background: var(--msg-sent); border-top-right-radius: 0; } 
+        .message.received { align-self: flex-start; background: var(--msg-received); border-top-left-radius: 0; } 
+        .message.system { align-self: center; background: rgba(0,0,0,0.05); color: var(--text-secondary); font-size: 0.8rem; padding: 5px 10px; border-radius: 10px; text-align: center; max-width: 80%; } 
+        .message.error { background: rgba(211, 47, 47, 0.1); color: var(--error); border: 1px solid var(--error); } 
+         
+        .msg-time { font-size: 0.7rem; color: var(--text-secondary); float: right; margin-left: 10px; margin-top: 5px; } 
+ 
+        .input-area { min-height: 62px; background: var(--bg-sidebar); padding: 10px 15px; display: flex; align-items: center; gap: 10px; z-index: 5; } 
+        .input-box { flex: 1; background: var(--bg-body); border-radius: 8px; padding: 9px 12px; } 
+        #messageInput { width: 100%; border: none; background: transparent; color: var(--text-primary); font-size: 1rem; } 
+        .send-btn { width: 45px; height: 45px; border-radius: 50%; border: none; background: var(--accent); color: white; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; } 
+        .send-btn:disabled { background: #ccc; cursor: not-allowed; } 
+ 
+        /* MODALS */ 
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 100; backdrop-filter: blur(2px); } 
+        .modal { background: var(--bg-sidebar); padding: 25px; border-radius: 10px; width: 90%; max-width: 400px; color: var(--text-primary); max-height: 90vh; overflow-y: auto; } 
+        .modal h3 { margin-top: 0; } 
+        .modal label { display: block; margin-top: 15px; font-weight: 600; font-size: 0.9rem; } 
+        .modal input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg-body); color: var(--text-primary); } 
+        .modal-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; } 
+        .btn { padding: 8px 16px; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; } 
+        .btn-primary { background: var(--accent); color: white; } 
+        .btn-secondary { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); } 
+         
+        .id-box {  
+            background: var(--bg-body); padding: 12px; border-radius: 6px;  
+            font-family: monospace; word-break: break-all; font-size: 0.85rem;  
+            border: 1px dashed var(--text-secondary); margin: 10px 0; cursor: pointer; 
+            text-align: center;        } 
+        .id-box:hover { border-color: var(--accent); background: rgba(0,168,132,0.05); } 
+ 
+        @media (max-width: 768px) { 
+            .sidebar { position: absolute; height: 100%; transform: translateX(-100%); } 
+            .sidebar.open { transform: translateX(0); } 
+            .menu-toggle { display: block; } 
+        } 
+    </style>
+                            </head>
+                            <body>
+                                <!-- SIDEBAR -->
+                                <div class="sidebar" id="sidebar">
+                                    <div class="sidebar-header">
+                                        <div class="user-avatar" id="myAvatar" onclick="openSettings()">U</div>
+                                        <div style="display: flex; gap: 5px;">
+                                            <button class="icon-btn" onclick="toggleTheme()">
+                                                <i class="fas fa-moon"></i>
+                                            </button>
+                                            <button class="icon-btn" onclick="openSettings()">
+                                                <i class="fas fa-cog"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div style="padding: 15px; border-bottom: 1px solid var(--border);">
+                                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 5px;">Статус сети:</div>
+                                        <div class="status-badge" id="networkStatus">
+                                            <div class="dot" id="networkDot"></div>
+                                            <span id="networkText">Подключение...</span>
+                                        </div>
+                                    </div>
+                                    <div class="chat-list" id="chatList">
+                                        <!-- Чаты появятся здесь -->
+                                    </div>
+                                    <div class="sidebar-footer">
+                                        <button class="icon-btn" onclick="clearChat()">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                        <button class="icon-btn" onclick="showAddFriend()">
+                                            <i class="fas fa-user-plus"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- MAIN CHAT -->
+                                <div class="main-chat">
+                                    <div class="chat-header">
+                                        <div class="header-info">
+                                            <i class="fas fa-bars menu-toggle" onclick="toggleSidebar()"></i>
+                                            <div class="user-avatar" id="chatAvatar" style="width: 35px; height: 35px; font-size: 0.9rem; background: #ccc;">?</div>
+                                            <div>
+                                                <div style="font-weight: 600;" id="chatName">Выберите чат</div>
+                                                <div style="font-size: 0.8rem; color: var(--text-secondary);" id="chatStatus">Ожидание...</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="messages-area" id="messagesArea"></div>
+                                    <div class="input-area">
+                                        <div class="input-box">
+                                            <input type="text" id="messageInput" placeholder="Введите сообщение..." onkeypress="handleEnter(event)" disabled>
+                                            </div>
+                                            <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>
+                                                <i class="fas fa-paper-plane"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <!-- SETTINGS MODAL -->
+                                    <div class="modal-overlay" id="settingsModal">
+                                        <div class="modal">
+                                            <h3>Настройки & Подключение</h3>
+                                            <label>Ваше имя</label>
+                                            <input type="text" id="usernameInput" placeholder="Как вас называть">
+                                                <label>Ваш ID (отправьте другу)</label>
+                                                <div class="id-box" id="myPeerId" onclick="copyId()">Нажмите, чтобы скопировать</div>
+                                                <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center;"> 
+                Скопируйте этот ID и отправьте другу 
+            </div>
+                                                <div class="modal-btns">
+                                                    <button class="btn btn-secondary" onclick="closeSettings()">Закрыть</button>
+                                                    <button class="btn btn-primary" onclick="saveSettings()">Сохранить имя</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- ADD FRIEND MODAL -->
+                                        <div class="modal-overlay" id="addFriendModal">
+                                            <div class="modal">
+                                                <h3>Подключиться к другу</h3>
+                                                <label>ID друга</label>
+                                                <input type="text" id="friendIdInput" placeholder="Вставьте ID друга сюда">
+                                                    <label>Имя друга (для отображения)</label>
+                                                    <input type="text" id="friendNameInput" placeholder="Например: Алекс">
+                                                        <div class="modal-btns">
+                                                            <button class="btn btn-secondary" onclick="document.getElementById('addFriendModal').style.display='none'">Отмена</button>
+                                                            <button class="btn btn-primary" onclick="connectToFriend()">Подключиться</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <script> 
+        // --- КОНФИГУРАЦИЯ --- 
+        const els = { 
+            msgArea: document.getElementById('messagesArea'), 
+            input: document.getElementById('messageInput'), 
+            sendBtn: document.getElementById('sendBtn'), 
+            chatList: document.getElementById('chatList'), 
+            networkDot: document.getElementById('networkDot'), 
+            networkText: document.getElementById('networkText'), 
+            myPeerId: document.getElementById('myPeerId') 
+        }; 
+ 
+        let currentUser = localStorage.getItem('chat_user') || 'User'; 
+        let peer = null; 
+        let connections = {}; // { peerId: conn } 
+        let friends = JSON.parse(localStorage.getItem('chat_friends') || '{}'); // { peerId: name } 
+        let activeChat = null; 
+ 
+        // --- ИНИЦИАЛИЗАЦИЯ PEERJS --- 
+        function initPeer() { 
+            let storedId = localStorage.getItem('chat_peer_id'); 
+            if(!storedId) { 
+                storedId = 'user-' + Math.random().toString(36).substr(2, 9); 
+                localStorage.setItem('chat_peer_id', storedId); 
+            } 
+ 
+            // Используем публичный сервер PeerJS явно 
+            peer = new Peer(storedId, { 
+                debug: 2, 
+                config: { 
+                    'iceServers': [ 
+                        { url: 'stun:stun.l.google.com:19302' }, 
+                        { url: 'stun:stun1.l.google.com:19302' } 
+                    ] 
+                } 
+            }); 
+ 
+            peer.on('open', (id) => { 
+                els.myPeerId.innerText = id; 
+                setNetworkStatus('online', 'В сети (готов к подключению)'); 
+                renderChatList(); 
+            }); 
+ 
+            peer.on('error', (err) => { 
+                console.error(err); 
+                if(err.type === 'unavailable-id') { 
+                    localStorage.removeItem('chat_peer_id'); 
+                    location.reload(); 
+                } else {                    setNetworkStatus('error', 'Ошибка: ' + err.type); 
+                    addSystemMessage('Ошибка соединения. Проверьте интернет или обновите страницу.'); 
+                } 
+            }); 
+ 
+            // Входное соединение (кто-то подключился к нам) 
+            peer.on('connection', (conn) => { 
+                handleConnection(conn); 
+            }); 
+        } 
+ 
+        function setNetworkStatus(status, text) { 
+            els.networkDot.className = 'dot ' + (status === 'online' ? 'green' : 'red'); 
+            els.networkText.innerText = text; 
+        } 
+ 
+        function handleConnection(conn) { 
+            connections[conn.peer] = conn; 
+ 
+            conn.on('open', () => { 
+                // Если это новый друг, добавляем в список если нет имени 
+                if(!friends[conn.peer]) { 
+                    friends[conn.peer] = "Гость"; 
+                    saveFriends(); 
+                } 
+                renderChatList(); 
+                addSystemMessage(`Подключено: ${friends[conn.peer]}`); 
+                 
+                // Если это активный чат, включаем ввод 
+                if(activeChat === conn.peer) { 
+                    enableInput(true); 
+                    updateChatHeader(); 
+                } 
+            }); 
+ 
+            conn.on('data', (data) => { 
+                if(data.type === 'message') { 
+                    saveMessage(conn.peer, data.payload); 
+                    if(activeChat === conn.peer) { 
+                        renderMessage(data.payload, false); 
+                        scrollToBottom(); 
+                    } 
+                    updatePreview(conn.peer, data.payload.text); 
+                } 
+            }); 
+ 
+            conn.on('close', () => { 
+                delete connections[conn.peer]; 
+                updateChatStatus(conn.peer, false); 
+                addSystemMessage(`${friends[conn.peer]} отключился`);                if(activeChat === conn.peer) enableInput(false); 
+            }); 
+             
+            conn.on('error', (err) => { 
+                console.error('Conn error:', err); 
+                addSystemMessage('Ошибка связи с другом'); 
+            }); 
+        } 
+ 
+        function connectToFriend() { 
+            const friendId = document.getElementById('friendIdInput').value.trim(); 
+            const friendName = document.getElementById('friendNameInput').value.trim() || 'Друг'; 
+ 
+            if(!friendId) return alert('Введите ID'); 
+            if(friendId === peer.id) return alert('Нельзя добавить себя'); 
+            if(connections[friendId]) return alert('Уже подключен'); 
+ 
+            const conn = peer.connect(friendId); 
+            handleConnection(conn); 
+             
+            friends[friendId] = friendName; 
+            saveFriends(); 
+            renderChatList(); 
+             
+            document.getElementById('addFriendModal').style.display = 'none'; 
+            switchChat(friendId); 
+            addSystemMessage('Попытка подключения...'); 
+        } 
+ 
+        function saveFriends() { 
+            localStorage.setItem('chat_friends', JSON.stringify(friends)); 
+        } 
+ 
+        // --- ЧАТ ЛОГИКА --- 
+        function sendMessage() { 
+            const text = els.input.value.trim(); 
+            if(!text || !activeChat || !connections[activeChat]) return; 
+ 
+            const msg = { 
+                id: Date.now(), 
+                text: text, 
+                sender: currentUser, 
+                time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) 
+            }; 
+ 
+            // Отправляем другу 
+            connections[activeChat].send({ type: 'message', payload: msg }); 
+             
+            // Сохраняем и рисуем у себя 
+            saveMessage(activeChat, msg);            renderMessage(msg, false); 
+            scrollToBottom(); 
+            updatePreview(activeChat, text); 
+ 
+            els.input.value = ''; 
+        } 
+ 
+        function saveMessage(chatId, msg) { 
+            const key = `chat_history_${chatId}`; 
+            let history = JSON.parse(localStorage.getItem(key) || '[]'); 
+            if(history.length > 50) history.shift(); 
+            history.push(msg); 
+            localStorage.setItem(key, JSON.stringify(history)); 
+        } 
+ 
+        function loadChat(chatId) { 
+            activeChat = chatId; 
+            els.msgArea.innerHTML = ''; 
+             
+            const key = `chat_history_${chatId}`; 
+            const history = JSON.parse(localStorage.getItem(key) || '[]'); 
+             
+            if(history.length === 0) { 
+                addSystemMessage('История пуста. Напишите первое сообщение!'); 
+            } else { 
+                history.forEach(msg => renderMessage(msg, true)); 
+            } 
+            scrollToBottom(); 
+             
+            renderChatList(); 
+            updateChatHeader(); 
+             
+            const isConnected = !!connections[chatId]; 
+            enableInput(isConnected); 
+        } 
+ 
+        function renderMessage(msg, animate) { 
+            const div = document.createElement('div'); 
+            const isMe = msg.sender === currentUser; 
+            div.className = `message ${isMe ? 'sent' : 'received'}`; 
+            if(!animate) div.style.animation = 'none'; 
+            div.innerHTML = `${msg.text}
+                                                    <div class="msg-time">${msg.time}</div>`; 
+            els.msgArea.appendChild(div); 
+        } 
+ 
+        function addSystemMessage(text) { 
+            const div = document.createElement('div'); 
+            div.className = 'message system'; 
+            div.innerText = text; 
+            els.msgArea.appendChild(div);            scrollToBottom(); 
+        } 
+ 
+        function enableInput(enabled) { 
+            els.input.disabled = !enabled; 
+            els.sendBtn.disabled = !enabled; 
+            document.getElementById('chatStatus').innerText = enabled ? 'в сети' : 'офлайн'; 
+        } 
+ 
+        // --- UI ФУНКЦИИ --- 
+        function renderChatList() { 
+            els.chatList.innerHTML = ''; 
+             
+            Object.entries(friends).forEach(([id, name]) => { 
+                const history = JSON.parse(localStorage.getItem(`chat_history_${id}`) || '[]'); 
+                const lastMsg = history[history.length - 1]; 
+                const preview = lastMsg ? (lastMsg.sender === currentUser ? 'Вы: ' : '') + lastMsg.text : 'Нет сообщений'; 
+                const isConnected = !!connections[id]; 
+                 
+                const item = document.createElement('div'); 
+                item.className = `chat-item ${activeChat === id ? 'active' : ''}`; 
+                item.onclick = () => switchChat(id); 
+                item.innerHTML = ` 
+                    
+                                                    <div class="user-avatar" style="background: linear-gradient(135deg, #f093fb, #f5576c)">${name.charAt(0)}</div>
+                                                    <div class="chat-info">
+                                                        <div class="chat-name"> 
+                            ${name} 
+                            
+                                                            <span style="font-size:0.7rem; color:${isConnected ? 'var(--success)' : '#ccc'}">●</span>
+                                                        </div>
+                                                        <div class="chat-preview">${preview}</div>
+                                                    </div> 
+                `; 
+                els.chatList.appendChild(item); 
+            }); 
+        } 
+ 
+        function switchChat(id) { 
+            loadChat(id); 
+            if(window.innerWidth <= 768) toggleSidebar(); 
+        } 
+ 
+        function updateChatHeader() { 
+            if(!activeChat) return; 
+            const name = friends[activeChat] || activeChat; 
+            document.getElementById('chatAvatar').innerText = name.charAt(0).toUpperCase(); 
+            document.getElementById('chatName').innerText = name; 
+            const connected = !!connections[activeChat]; 
+            document.getElementById('chatStatus').innerText = connected ? 'в сети' : 'офлайн'; 
+            document.getElementById('chatStatus').style.color = connected ? 'var(--success)' : 'var(--text-secondary)'; 
+        } 
+        function updatePreview(id, text) { 
+            renderChatList(); 
+        } 
+ 
+        function updateChatStatus(id, online) { 
+            if(activeChat === id) updateChatHeader(); 
+            renderChatList(); 
+        } 
+ 
+        function toggleSidebar() { 
+            document.getElementById('sidebar').classList.toggle('open'); 
+        } 
+ 
+        function openSettings() {  
+            document.getElementById('settingsModal').style.display = 'flex';  
+        } 
+        function closeSettings() {  
+            document.getElementById('settingsModal').style.display = 'none';  
+        } 
+        function showAddFriend() { 
+            document.getElementById('addFriendModal').style.display = 'flex'; 
+        } 
+ 
+        function updateUI() { 
+            document.getElementById('myAvatar').innerText = currentUser.charAt(0).toUpperCase(); 
+            document.getElementById('usernameInput').value = currentUser; 
+        } 
+ 
+        function saveSettings() { 
+            const name = document.getElementById('usernameInput').value.trim(); 
+            if(name) { 
+                currentUser = name; 
+                localStorage.setItem('chat_user', name); 
+                updateUI(); 
+                renderChatList(); 
+            } 
+            closeSettings(); 
+        } 
+ 
+        function copyId() { 
+            const id = els.myPeerId.innerText; 
+            if(id && id !== 'Нажмите, чтобы скопировать') { 
+                navigator.clipboard.writeText(id); 
+                alert('ID скопирован! Отправьте его другу.'); 
+            } 
+        } 
+ 
+        function clearChat() { 
+            if(!activeChat || !confirm('Очистить историю?')) return;            const key = `chat_history_${activeChat}`; 
+            localStorage.removeItem(key); 
+            loadChat(activeChat); 
+        } 
+ 
+        function handleEnter(e) { if(e.key === 'Enter') sendMessage(); } 
+        function scrollToBottom() { els.msgArea.scrollTop = els.msgArea.scrollHeight; } 
+ 
+        function toggleTheme() { 
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark'; 
+            document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark'); 
+            localStorage.setItem('chat_theme', isDark ? 'light' : 'dark'); 
+        } 
+ 
+        // Запуск 
+        window.addEventListener('DOMContentLoaded', () => { 
+            updateUI(); 
+            const savedTheme = localStorage.getItem('chat_theme'); 
+            if(savedTheme) document.documentElement.setAttribute('data-theme', savedTheme); 
+            initPeer(); 
+        }); 
+    
+                                                </script>
+                                            </body>
+                                        </html>
+                                    </p>
+                                </body>
+                            </html>
