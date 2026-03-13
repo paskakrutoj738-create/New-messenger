@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>P2P Chat Diagnostic</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; background: #f5f5f5; }
+        .box { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; }
+        .status { padding: 10px; border-radius: 5px; margin-bottom: 15px; font-weight: bold; }
+        .status.ok { background: #d4edda; color: #155724; }
+        .status.err { background: #f8d7da; color: #721c24; }
+        .status.wait { background: #fff3cd; color: #856404; }
+        input { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; border: 1px solid #ddd; border-radius: 5px; }
+        button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 5px; }
+        button:disabled { background: #ccc; }
+        #log { background: #222; color: #0f0; padding: 10px; border-radius: 5px; height: 150px; overflow-y: auto; font-family: monospace; font-size: 0.8rem; }
+        #chat { height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin: 10px 0; background: #fafafa; }
+        .msg { margin: 5px 0; padding: 5px 10px; border-radius: 5px; }
+        .msg.me { background: #dcf8c6; text-align: right; }
+        .msg.other { background: #fff; border: 1px solid #ddd; }
+        .hidden { display: none; }
+        .id-display { background: #e3f2fd; padding: 10px; border-radius: 5px; word-break: break-all; font-family: monospace; border: 1px dashed #2196f3; }
+    </style>
+</head>
+<body>
+
+    <h1>🔧 P2P Мессенджер (Диагностика)</h1>
+
+    <div id="status" class="status wait">Инициализация...</div>
+
+    <div class="box">
+        <h3>1. Твой ID</h3>
+        <div id="myId" class="id-display">Генерация...</div>
+        <button onclick="copyId()">Копировать ID</button>
+    </div>
+
+    <div class="box">
+        <h3>2. Подключение к другу</h3>
+        <input type="text" id="remoteId" placeholder="Вставь ID друга сюда">
+        <input type="text" id="myName" placeholder="Твое имя" value="User">
+        <button id="connectBtn" onclick="connect()">Подключиться</button>
+    </div>
+
+    <div class="box hidden" id="chatBox">
+        <h3>3. Чат</h3>
+        <div id="chat"></div>
+        <input type="text" id="msgInput" placeholder="Сообщение...">
+        <button onclick="send()">Отправить</button>
+    </div>
+
+    <div class="box">
+        <h3>📋 Журнал ошибок (Log)</h3>
+        <div id="log"></div>
+        <button onclick="document.getElementById('log').innerHTML=''" style="background:#555; font-size:0.8rem;">Очистить лог</button>
+    </div>
+
+<script>
+    let peer = null;
+    let conn = null;
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+
+    function log(msg, type='info') {
+        const time = new Date().toLocaleTimeString();
+        const color = type === 'error' ? '#f55' : (type === 'success' ? '#5f5' : '#0f0');
+        logEl.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
+        logEl.scrollTop = logEl.scrollHeight;
+        console.log(msg);
+    }
+
+    function setStatus(type, text) {
+        statusEl.className = 'status ' + type;
+        statusEl.innerText = text;
+    }
+
+    // Инициализация
+    try {
+        peer = new Peer(null, {
+            debug: 3,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' }
+                ]
+            }
+        });
+
+        peer.on('open', (id) => {
+            document.getElementById('myId').innerText = id;
+            setStatus('ok', '✅ Сеть готова! ID получен.');
+            log('Peer ID получен: ' + id, 'success');
+        });
+
+        peer.on('error', (err) => {
+            setStatus('err', '❌ Ошибка: ' + err.type);
+            log('ОШИБКА: ' + err.type + ' | ' + err.message, 'error');
+            
+            if(err.type === 'network') {
+                log('⚠️ Похоже, WebRTC блокируется. Проверь VPN или HTTPS.', 'error');
+            }
+        });
+
+        peer.on('connection', (c) => {
+            log('Входящее соединение от: ' + c.peer, 'success');
+            setupConnection(c);
+        });
+
+    } catch(e) {
+        setStatus('err', 'Критическая ошибка скрипта');
+        log('CRITICAL: ' + e.message, 'error');
+    }
+
+    function connect() {
+        const remoteId = document.getElementById('remoteId').value.trim();
+        if(!remoteId) return alert('Введи ID!');
+        
+        setStatus('wait', 'Подключение...');
+        log('Попытка подключения к ' + remoteId);
+        
+        try {
+            const c = peer.connect(remoteId);
+            setupConnection(c);
+        } catch(e) {
+            log('Ошибка при подключении: ' + e.message, 'error');
+        }
+    }
+
+    function setupConnection(c) {
+        conn = c;
+        
+        conn.on('open', () => {
+            setStatus('ok', '✅ Подключено!');
+            document.getElementById('chatBox').classList.remove('hidden');
+            log('Соединение установлено', 'success');
+            addMsg('Система', 'Вы подключились!', 'other');
+        });
+
+        conn.on('data', (data) => {
+            log('Получено: ' + data.text);
+            addMsg(data.user, data.text, 'other');
+        });
+
+        conn.on('close', () => {
+            setStatus('err', 'Друг отключился');
+            log('Соединение разорвано', 'error');
+            conn = null;
+        });
+
+        conn.on('error', (err) => {
+            setStatus('err', 'Ошибка связи');
+            log('Ошибка соединения: ' + err, 'error');
+        });
+    }
+
+    function send() {
+        const input = document.getElementById('msgInput');
+        const user = document.getElementById('myName').value || 'Anon';
+        const text = input.value.trim();
+        
+        if(!text) return;
+        if(!conn) return alert('Нет соединения!');
+
+        conn.send({ user: user, text: text });
+        addMsg(user, text, 'me');
+        input.value = '';
+        log('Отправлено: ' + text);
+    }
+
+    function addMsg(user, text, type) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + type;
+        div.innerHTML = `<b>${user}:</b> ${text}`;
+        document.getElementById('chat').appendChild(div);
+        document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
+    }
+
+    function copyId() {
+        const id = document.getElementById('myId').innerText;
+        if(id && id !== 'Генерация...') {
+            navigator.clipboard.writeText(id);
+            alert('ID скопирован!');
+            log('ID скопирован в буфер');
+        }
+    }
+</script>
+</body>
+</html>
