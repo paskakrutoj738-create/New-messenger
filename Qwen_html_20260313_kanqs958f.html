@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Мессенджер vFinal</title>
+    <!-- Подключаем библиотеку ОДИН РАЗ -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; margin: 0; height: 100vh; display: flex; }
+        .sidebar { width: 300px; background: white; border-right: 1px solid #ddd; padding: 15px; overflow-y: auto; }
+        .main { flex: 1; display: flex; flex-direction: column; }
+        .header { padding: 15px; background: white; border-bottom: 1px solid #ddd; font-weight: bold; }
+        .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .msg { max-width: 70%; padding: 10px 15px; border-radius: 15px; word-wrap: break-word; }
+        .msg.sent { align-self: flex-end; background: #dcf8c6; }
+        .msg.recv { align-self: flex-start; background: white; border: 1px solid #ddd; }
+        .input { padding: 15px; background: white; border-top: 1px solid #ddd; display: flex; gap: 10px; }
+        .input input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 20px; }
+        .input button { padding: 10px 20px; background: #00a884; color: white; border: none; border-radius: 20px; cursor: pointer; }
+        .status { padding: 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 10px; }
+        .status.ok { background: #d4edda; color: #155724; }
+        .status.err { background: #f8d7da; color: #721c24; }
+        input { width: 100%; padding: 8px; margin: 5px 0; box-sizing: border-box; }
+        .room-code { background: #e3f2fd; padding: 10px; border-radius: 5px; font-family: monospace; word-break: break-all; margin: 10px 0; }
+        h3 { margin-top: 0; }
+        label { font-weight: 600; font-size: 0.9rem; margin-top: 10px; display: block; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h3>⚙️ Настройки</h3>
+    <div class="status err" id="status">Подключение...</div>
+    
+    <label>Код комнаты</label>
+    <input type="text" id="roomInput" value="room1">
+    
+    <label>Ваше имя</label>
+    <input type="text" id="nameInput" value="User">
+    
+    <div style="margin-top: 20px;">
+        <b>📋 Код для друга:</b>
+        <div class="room-code" id="roomCode">room1</div>
+        <button onclick="copyRoom()" style="width:100%; padding:8px; background:#2196f3; color:white; border:none; border-radius:5px; cursor:pointer;">Копировать</button>
+    </div>
+    <button onclick="changeRoom()" style="width:100%; margin-top:10px; padding:8px; background:#00a884; color:white; border:none; border-radius:5px; cursor:pointer;">Сменить комнату</button>
+</div>
+
+<div class="main">
+    <div class="header">💬 Чат: <span id="currentRoom">room1</span></div>
+    <div class="messages" id="messages"></div>
+    <div class="input">
+        <input type="text" id="msgInput" placeholder="Сообщение..." onkeypress="if(event.key==='Enter')send()">
+        <button onclick="send()">➤</button>
+    </div>
+</div>
+
+<script>
+    // === 1. НАСТРОЙКИ (ВСТАВЛЕНО ОДИН РАЗ) ===
+    const SUPABASE_URL = 'https://kbvhnlycaxppvvihuhuo.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_PomDeqmjTZ_y5Y5qxs9PIA_dBTPto1i';
+    
+    // Создаем клиент ТОЛЬКО ЗДЕСЬ
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    
+    let room = localStorage.getItem('chat_room') || 'room1';
+    let username = localStorage.getItem('chat_name') || 'User';
+    let subscription = null;
+
+    const els = {
+        status: document.getElementById('status'),
+        messages: document.getElementById('messages'),
+        roomInput: document.getElementById('roomInput'),
+        nameInput: document.getElementById('nameInput'),
+        msgInput: document.getElementById('msgInput'),
+        roomCode: document.getElementById('roomCode'),
+        currentRoom: document.getElementById('currentRoom')
+    };
+
+    async function init() {
+        els.roomInput.value = room;
+        els.nameInput.value = username;
+        els.roomCode.textContent = room;
+        els.currentRoom.textContent = room;
+        await connectToRoom(room);
+    }
+
+    async function connectToRoom(newRoom) {
+        room = newRoom;
+        localStorage.setItem('chat_room', room);
+        els.roomCode.textContent = room;
+        els.currentRoom.textContent = room;
+        
+        if(subscription) subscription.unsubscribe();
+        els.messages.innerHTML = '';
+        setStatus('Подключение...', 'err');
+        
+        subscription = supabase
+            .channel(`room:${room}`)
+            .on('postgres_changes', 
+                { event: 'INSERT', schema: 'public', table: 'messages' },
+                (payload) => {
+                    const msg = payload.new;
+                    if(msg.room === room) addMsg(msg.sender, msg.text, msg.sender !== username);
+                }
+            )
+            .subscribe((status) => {
+                if(status === 'SUBSCRIBED') {
+                    setStatus('✅ В сети', 'ok');
+                    loadHistory();
+                } else {
+                    setStatus('⏳ Ожидание...', 'err');
+                }
+            });
+    }
+
+    async function loadHistory() {
+        const { data, error } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('room', room)
+            .order('created_at', { ascending: true })
+            .limit(100);
+        
+        els.messages.innerHTML = '';
+        if(error) {
+            addSystem('❌ Ошибка: ' + error.message);
+        } else if(data && data.length === 0) {
+            addSystem('Начните общение! 🎉');
+        }
+        data?.forEach(msg => addMsg(msg.sender, msg.text, msg.sender !== username));
+    }
+
+    async function send() {
+        const text = els.msgInput.value.trim();
+        if(!text) return;
+        
+        const { error } = await supabase
+            .from('messages')
+            .insert([{ sender: username, text: text, room: room }]);
+        
+        if(error) alert('Ошибка: ' + error.message);
+        else els.msgInput.value = '';
+    }
+
+    function addMsg(sender, text, isRecv) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + (isRecv ? 'recv' : 'sent');
+        div.innerHTML = `<b>${sender}:</b> ${text}`;
+        els.messages.appendChild(div);
+        els.messages.scrollTop = els.messages.scrollHeight;
+    }
+
+    function addSystem(text) {
+        const div = document.createElement('div');
+        div.style.cssText = 'text-align:center; color:#666; margin: 10px 0;';
+        div.textContent = text;
+        els.messages.appendChild(div);
+    }
+
+    function setStatus(text, type) {
+        els.status.textContent = text;
+        els.status.className = 'status ' + type;
+    }
+
+    function changeRoom() {
+        username = els.nameInput.value.trim() || 'User';
+        localStorage.setItem('chat_name', username);
+        connectToRoom(els.roomInput.value.trim() || 'room1');
+    }
+
+    function copyRoom() {
+        navigator.clipboard.writeText(room);
+        alert('Код скопирован!');
+    }
+
+    init();
+</script>
+
+</body>
+</html>
